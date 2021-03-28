@@ -1,10 +1,10 @@
 import React, { useRef, useCallback } from 'react';
-import { FiLogIn, FiMail, FiLock } from 'react-icons/fi';
+import { FiLogIn, FiLock } from 'react-icons/fi';
 import { Form } from '@unform/web';
 import { FormHandles } from '@unform/core';
 import * as Yup from 'yup';
 
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useHistory, useLocation } from 'react-router-dom';
 
 import { AnimationContainer, Container, Content, Background } from './style';
 import logoImg from '../../assets/logo.svg';
@@ -12,36 +12,55 @@ import Input from '../../components/Input';
 import Button from '../../components/Button';
 import getValidationErrors from '../../utils/getValidationErrors';
 
-import { useAuth } from '../../hooks/auth';
 import { useToast } from '../../hooks/toast';
+import api from '../../services/api';
 
-interface SignInFormData {
-  email: string;
+interface ResetPasswordFormData {
   password: string;
+  password_confirmation: string;
 }
 
 const SignIn: React.FC = () => {
   const history = useHistory();
-  const { signIn } = useAuth();
   const { addToast } = useToast();
   const formRef = useRef<FormHandles>(null);
+  const location = useLocation();
 
   const handleSubmit = useCallback(
-    async (data: SignInFormData) => {
+    async (data: ResetPasswordFormData) => {
       try {
         formRef.current?.setErrors({});
+
         const schema = Yup.object().shape({
-          email: Yup.string()
-            .required('E-mail obrigatório')
-            .email('Digite um e-mail válido'),
           password: Yup.string().required('Senha obrigatória'),
+          password_confirmation: Yup.string().oneOf(
+            [Yup.ref('password')],
+            'Confirmação incorreta',
+          ),
         });
+
         await schema.validate(data, {
           abortEarly: false,
         });
-        await signIn({
-          email: data.email,
-          password: data.password,
+
+        const { password, password_confirmation } = data;
+        const token = location.search.replace('?token=', '');
+
+        if (!token) {
+          throw new Error('Token inválido para recuperação de senha');
+        }
+
+        await api.post('/password/reset', {
+          password,
+          password_confirmation,
+          token,
+        });
+
+        addToast({
+          type: 'success',
+          title: 'Senha alterada',
+          description:
+            'Senha alterada com sucesso, realize o login para continuar',
         });
 
         history.push('/');
@@ -54,13 +73,13 @@ const SignIn: React.FC = () => {
 
         addToast({
           type: 'error',
-          title: 'Erro na autenticação',
+          title: 'Erro ao resetar senha',
           description:
-            'Ocorreu um erro ao realizar o login, confira as credenciais...',
+            'Ocorreu um erro ao resetart sua senha, tente novamente.',
         });
       }
     },
-    [signIn, addToast, history],
+    [addToast, history, location],
   );
 
   return (
@@ -69,21 +88,27 @@ const SignIn: React.FC = () => {
         <AnimationContainer>
           <img src={logoImg} alt="GoBarber" />
           <Form ref={formRef} onSubmit={handleSubmit}>
-            <h1>Faça seu login</h1>
-            <Input name="email" icon={FiMail} placeholder="E-mail" />
+            <h1>Resetar senha</h1>
+
             <Input
               name="password"
               icon={FiLock}
               type="password"
-              placeholder="Senha"
+              placeholder="Nova senha"
             />
-            <Button type="submit">Entrar</Button>
-            {/* <a href="forgot">Esqueci minha senha</a> */}
-            <Link to="/forgot-password">Esqueci minha senha</Link>
+
+            <Input
+              name="password_confirmation"
+              icon={FiLock}
+              type="password"
+              placeholder="Confirmação da senha"
+            />
+
+            <Button type="submit">Alterar senha</Button>
           </Form>
-          <Link to="signup">
+          <Link to="signin">
             <FiLogIn />
-            Criar conta
+            Voltar para login
           </Link>
         </AnimationContainer>
       </Content>
